@@ -1,0 +1,234 @@
+LIGGGHTS (Version LIGGGHTS-PUBLIC 3.8.0, compiled 2021-08-04-16:56:40 by raghuram, git commit 78f1a0277ef1f4f8ec5be8ad2f9715aa0ca5796c)
+atom_style	granular
+atom_modify	map array
+boundary	f f f
+newton		off
+hard_particles yes
+
+communicate	single vel yes
+processors	2 2 1
+
+units		si
+
+region		reg block -0.045 0.045 -0.025 0.025 0 0.003 units box
+create_box	2 reg
+Created orthogonal box = (-0.045 -0.025 0) to (0.045 0.025 0.003)
+  2 by 2 by 1 MPI processor grid
+
+neighbor	0.005 bin
+neigh_modify	delay 0
+
+
+
+#Material properties required for new pair styles
+
+fix 		m1 all property/global youngsModulus peratomtype 100.e9 200e9
+fix 		m2 all property/global poissonsRatio peratomtype 0.25 0.25
+fix 		m3 all property/global coefficientRestitution peratomtypepair 2 0.1 0.1 0.1 0.1
+fix 		m4 all property/global coefficientFriction peratomtypepair 2 0.1 0.01 0.01 0.01
+#fix 		m5 all property/global characteristicVelocity scalar 2.
+#fix 		m6 all property/global cohesionEnergyDensity peratomtypepair 1 500
+
+#New pair style
+pair_style gran model hertz tangential history #Hertzian without cohesion
+pair_coeff	* *
+
+timestep	0.00000001
+
+fix		gravi all gravity 9.81 vector 0.0 0.0 -1
+
+#particle distributions
+fix		pts1 all particletemplate/sphere 10007 atom_type 1 density constant 2000 radius constant 0.001
+
+fix		pdd1 all particledistribution/discrete 888373 1 pts1 1 #pts2 0.7
+
+
+######## walls
+fix zwalls1 all wall/gran model hertz tangential history primitive type 2 zplane 0.0021
+fix zwalls0 all wall/gran model hertz tangential history primitive type 2 zplane 0.0
+
+fix xwalls1 all wall/gran model hertz tangential history primitive type 2 xplane 0.04
+fix xwalls0 all wall/gran model hertz tangential history primitive type 2 xplane -0.055
+fix ywalls1 all wall/gran model hertz tangential history primitive type 2 yplane 0.02
+fix ywalls0 all wall/gran model hertz tangential history primitive type 2 yplane -0.02
+
+
+fix 		rx1 all mesh/surface/stress file rx_wall_0.stl type 2  stress on
+fix 		rx2b all mesh/surface/stress file rx_wall_0b.stl type 2 stress on
+
+fix 		ry1 all mesh/surface/stress file ry1_wall.stl type 2 scale 0.001  stress on
+fix 		ry2 all mesh/surface/stress file ry2_wall.stl type 2 scale 1  stress on
+
+
+fix 		geom2  all  wall/gran model hertz tangential history mesh n_meshes  4 meshes rx1 rx2b ry1 ry2
+
+#region and insertion
+
+################### creating hcp
+
+
+lattice		hcp 0.002 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+Lattice spacing in x,y,z = 0.002 0.0034641 0.00326599
+
+
+region		reg_ins block -0.0397 0.0397 -0.02 0.02 0.0005 0.0017 units box
+
+
+create_atoms    1 region reg_ins  units box
+Created 908 atoms
+
+###***************************************************************************************
+
+
+group	nve_group region reg_ins
+908 atoms in group nve_group
+set             group nve_group diameter 0.002 density 2000
+  908 settings made for diameter
+  908 settings made for density
+
+
+compute   q  all  pair/gran/local  id force_normal force_tangential history contactArea delta pos vel force
+
+
+compute   kl all  wall/gran/local  id force_normal force_tangential history contactArea delta
+WARNING: Compute wall/gran/local detected primitive wall, output will only happen for mesh wall - particle pairs (../compute_pair_gran_local.cpp:263)
+
+
+#apply nve integration to all particles that are inserted as single particles
+fix		integr all nve/sphere
+
+
+
+#output settings, include total thermal energy
+compute		1 all erotate/sphere
+thermo_style	custom step atoms ke c_1 vol
+thermo		10000
+thermo_modify	lost ignore norm no
+#filedirectory creation
+shell mkdir coord
+shell mkdir coordvtk
+shell mkdir contact
+
+#insert the first particles so that dump is not empty
+run		1
+WARNING: Compute wall/gran/local detected primitive wall, output will only happen for mesh wall - particle pairs (../compute_pair_gran_local.cpp:263)
+Setting up run at Sat Aug 14 16:09:14 2021
+
+WARNING: Not all nodes of fix mesh inside simulation box, elements will be deleted or wrapped around periodic boundary conditions (../fix_mesh.cpp:531)
+WARNING: Not all nodes of fix mesh inside simulation box, elements will be deleted or wrapped around periodic boundary conditions (../fix_mesh.cpp:531)
+Memory usage per processor = 19.6044 Mbytes
+    Step    Atoms         KinEng              1         Volume 
+       0      908              0              0       1.35e-05 
+       1      908      9.1842683  1.3462233e-05       1.35e-05 
+Loop time of 0.0001615 on 4 procs for 1 steps with 908 atoms, finish time Sat Aug 14 16:09:14 2021
+
+
+Pair  time (%) = 6.0525e-05 (37.4768)
+Neigh time (%) = 0 (0)
+Comm  time (%) = 1.86e-05 (11.517)
+Outpt time (%) = 1.045e-05 (6.47059)
+Other time (%) = 7.1925e-05 (44.5356)
+
+Nlocal:    227 ave 240 max 214 min
+Histogram: 1 0 1 0 0 0 0 1 0 1
+Nghost:    137 ave 142 max 132 min
+Histogram: 1 0 0 0 1 0 1 0 0 1
+Neighs:    4745.75 ave 5015 max 4474 min
+Histogram: 1 0 1 0 0 0 0 1 0 1
+
+Total # of neighbors = 18983
+Ave neighs/atom = 20.9064
+Neighbor list builds = 0
+Dangerous builds = 0
+dump		dmp all custom 50000 coord/cd_*.dat id type x y z vx vy vz fx fy fz omegax omegay omegaz radius
+
+dump		dmp3 all custom/vtk 50000 coordvtk/cd_*.vtk id type x y z vx vy vz fx fy fz omegax omegay omegaz radius
+
+
+dump               dmp10   all local     50000  contact/p*.dat c_q[13] c_q[14] c_q[15] c_q[16] c_q[17] c_q[18] c_q[19] c_q[20] c_q[21]
+#c_q[1] c_q[2] c_q[3] c_q[4] c_q[5] c_q[6] c_q[7] c_q[8] c_q[9] c_q[10] c_q[11] c_q[12] c_q[13] c_q[14] c_q[15] c_q[16]
+
+
+
+run		10000
+WARNING: Compute wall/gran/local detected primitive wall, output will only happen for mesh wall - particle pairs (../compute_pair_gran_local.cpp:263)
+Setting up run at Sat Aug 14 16:09:14 2021
+
+Memory usage per processor = 19.6045 Mbytes
+    Step    Atoms         KinEng              1         Volume 
+       1      908      9.1842683  1.3462233e-05       1.35e-05 
+   10000      908    0.010624617   0.0099426949       1.35e-05 
+   10001      908    0.010601089   0.0099429215       1.35e-05 
+Loop time of 1.3275 on 4 procs for 10000 steps with 908 atoms, finish time Sat Aug 14 16:09:15 2021
+
+
+Pair  time (%) = 0.77546 (58.4151)
+Neigh time (%) = 0 (0)
+Comm  time (%) = 0.0763507 (5.75146)
+Outpt time (%) = 2.3e-05 (0.00173258)
+Other time (%) = 0.475666 (35.8317)
+
+Nlocal:    227 ave 240 max 214 min
+Histogram: 1 0 1 0 0 0 0 1 0 1
+Nghost:    137 ave 142 max 132 min
+Histogram: 1 0 0 0 1 0 1 0 0 1
+Neighs:    4745.75 ave 5015 max 4474 min
+Histogram: 1 0 1 0 0 0 0 1 0 1
+
+Total # of neighbors = 18983
+Ave neighs/atom = 20.9064
+Neighbor list builds = 0
+Dangerous builds = 0
+
+
+
+
+group del_particle id 233  #659
+1 atoms in group del_particle
+
+delete_atoms group del_particle
+Deleted 1 atoms, new total = 907
+
+fix move all move/mesh mesh rx2b linear 0.02 0 0.
+
+
+run 		750000
+WARNING: Compute wall/gran/local detected primitive wall, output will only happen for mesh wall - particle pairs (../compute_pair_gran_local.cpp:263)
+Setting up run at Sat Aug 14 16:09:15 2021
+
+Memory usage per processor = 19.6046 Mbytes
+    Step    Atoms         KinEng              1         Volume 
+   10001      907    0.010586916   0.0099390274       1.35e-05 
+   20000      907   0.0015783877    0.002447548       1.35e-05 
+   30000      907  0.00018525799   0.0010992987       1.35e-05 
+   40000      907  3.4108558e-05  0.00011280869       1.35e-05 
+   50000      907  5.8532595e-07  3.1897185e-06       1.35e-05 
+   60000      907  2.2825092e-07  1.1626661e-08       1.35e-05 
+   70000      907  3.5901029e-07  8.4941411e-09       1.35e-05 
+   80000      907  4.5804663e-07  7.8355601e-09       1.35e-05 
+   90000      907  4.2548908e-07  5.6106545e-09       1.35e-05 
+  100000      907  5.0684157e-07  6.3339118e-09       1.35e-05 
+  110000      907  4.4219982e-07  4.8450915e-09       1.35e-05 
+  120000      907  4.9410531e-07  4.8765135e-09       1.35e-05 
+WARNING: Forced restart written (../output.cpp:427)
+  127185      907  4.5996768e-07  4.1302435e-09       1.35e-05 
+Loop time of 19.1324 on 4 procs for 750000 steps with 907 atoms, finish time Sat Aug 14 16:09:34 2021
+
+
+Pair  time (%) = 9.86273 (51.5499)
+Neigh time (%) = 0.00014835 (0.000775387)
+Comm  time (%) = 0.91443 (4.77949)
+Outpt time (%) = 1.0532 (5.50482)
+Other time (%) = 7.30187 (38.165)
+
+Nlocal:    226.75 ave 237 max 217 min
+Histogram: 1 0 0 1 0 0 1 0 0 1
+Nghost:    144.25 ave 152 max 137 min
+Histogram: 2 0 0 0 0 0 0 0 1 1
+Neighs:    4731 ave 4962 max 4537 min
+Histogram: 1 0 1 0 0 1 0 0 0 1
+
+Total # of neighbors = 18924
+Ave neighs/atom = 20.8644
+Neighbor list builds = 1
+Dangerous builds = 0
